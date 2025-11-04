@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 
 export default function AllPerks() {
   
- 
+
   const [perks, setPerks] = useState([])
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -21,14 +21,37 @@ export default function AllPerks() {
   
   const [error, setError] = useState('')
 
+  // Ref to track if this is the first mount (prevents double API call)
+  const isFirstMount = useRef(true)
+
   // ==================== SIDE EFFECTS WITH useEffect HOOK ====================
 
- /*
- TODO: HOOKS TO IMPLEMENT
- * useEffect Hook #1: Initial Data Loading
- * useEffect Hook #2: Auto-search on Input Change
+  // useEffect Hook #1: Initial Data Loading
+  useEffect(() => {
+    // Load all perks when component first mounts
+    loadAllPerks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array means this runs only once on mount
 
-*/
+  // useEffect Hook #2: Auto-search on Input Change
+  useEffect(() => {
+    // Skip the auto-search on initial mount to avoid double API call
+    if (isFirstMount.current) {
+      // Mark that initial mount is complete, so next time this effect runs, it will execute
+      isFirstMount.current = false
+      return // Skip on initial mount
+    }
+
+    // Create a debounce timer to wait for user to stop typing
+    const debounceTimer = setTimeout(() => {
+      loadAllPerks()
+    }, 300) // Wait 300ms after user stops typing before searching
+
+    // Cleanup function: clear the timer if searchQuery or merchantFilter changes again
+    // This prevents unnecessary API calls
+    return () => clearTimeout(debounceTimer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, merchantFilter]) // Re-run when searchQuery or merchantFilter changes
 
   
   useEffect(() => {
@@ -136,7 +159,8 @@ export default function AllPerks() {
                 type="text"
                 className="input"
                 placeholder="Enter perk name..."
-                
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
               <p className="text-xs text-zinc-500 mt-1">
                 Auto-searches as you type, or press Enter / click Search
@@ -151,7 +175,8 @@ export default function AllPerks() {
               </label>
               <select
                 className="input"
-                
+                value={merchantFilter}
+                onChange={(e) => setMerchantFilter(e.target.value)}
               >
                 <option value="">All Merchants</option>
                 
@@ -217,7 +242,7 @@ export default function AllPerks() {
           
           <Link
             key={perk._id}
-           
+            to={`/perks/${perk._id}`}
             className="card hover:shadow-lg transition-shadow cursor-pointer"
           >
             {/* Perk Title */}

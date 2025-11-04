@@ -1,5 +1,7 @@
 import Joi from 'joi';
+import mongoose from 'mongoose';
 import { Perk } from '../models/Perk.js';
+import { User } from '../models/User.js';
 
 // validation schema for creating/updating a perk
 const perkSchema = Joi.object({
@@ -69,14 +71,46 @@ export async function getAllPerksPublic(req, res, next) {
       query.merchant = merchant.trim();
     }
     
-    // Fetch perks with the built query, populate creator info, and sort by newest first
+    // First, fetch perks without populate to avoid ObjectId casting errors
+    // This ensures we get ALL perks even if some have invalid createdBy values
     const perks = await Perk
       .find(query)
-      .populate('createdBy', 'name email') // Include creator information
       .sort({ createdAt: -1 })
       .lean();
 
-    res.json({ perks });
+    // Now manually populate only perks with valid ObjectIds
+    // This prevents errors when createdBy contains invalid values like "karim"
+    const perksWithCreator = await Promise.all(
+      perks.map(async (perk) => {
+        // Check if createdBy exists and is a valid ObjectId
+        if (perk.createdBy && mongoose.Types.ObjectId.isValid(perk.createdBy)) {
+          try {
+            // Try to find and populate the user
+            const user = await User.findById(perk.createdBy).select('name email').lean();
+            return {
+              ...perk,
+              createdBy: user || null // Set to null if user not found
+            };
+          } catch (err) {
+            // If any error occurs (user not found, etc.), set createdBy to null
+            return {
+              ...perk,
+              createdBy: null
+            };
+          }
+        } else {
+          // Invalid ObjectId (like "karim" string), set createdBy to null
+          // This allows the perk to still be displayed
+          return {
+            ...perk,
+            createdBy: null
+          };
+        }
+      })
+    );
+
+    // Return all perks, with creator info populated where valid
+    res.json({ perks: perksWithCreator });
   } catch (err) {
     next(err);
   }
